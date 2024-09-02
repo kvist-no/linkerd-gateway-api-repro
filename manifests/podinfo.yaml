@@ -1,0 +1,100 @@
+kind: Rollout
+apiVersion: argoproj.io/v1alpha1
+metadata:
+  name: podinfo
+  labels:
+    app: podinfo
+spec:
+  replicas: 2
+  strategy:
+    canary:
+      stableService: podinfo
+      canaryService: podinfo-canary
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: podinfo-http-route
+            namespace: default
+      steps:
+        - setWeight: 50
+        - pause: { }
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: podinfo
+  template:
+    metadata:
+      labels:
+        app: podinfo
+      annotations:
+        linkerd.io/inject: enabled
+    spec:
+      containers:
+        - name: podinfo
+          image: stefanprodan/podinfo:6.7.0
+          command:
+            - ./podinfo
+            - --port=9898
+          ports:
+            - name: http
+              containerPort: 9898
+              protocol: TCP
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo
+  annotations:
+    retry.linkerd.io/http: '500'
+    retry.linkerd.io/limit: '3'
+    retry.linkerd.io/timeout: 300ms
+spec:
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: podinfo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: podinfo-canary
+  annotations:
+    retry.linkerd.io/http: '500'
+    retry.linkerd.io/limit: '3'
+    retry.linkerd.io/timeout: 300ms
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app: podinfo
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: podinfo-http-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: podinfo
+      kind: Service
+      group: core
+  rules:
+    - backendRefs:
+        - name: podinfo
+          port: 80
+          kind: Service
+        - name: podinfo-canary
+          port: 80
+          kind: Service

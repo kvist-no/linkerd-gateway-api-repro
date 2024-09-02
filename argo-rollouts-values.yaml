@@ -1,0 +1,16 @@
+controller:
+  trafficRouterPlugins:
+    trafficRouterPlugins: |-
+      - name: "argoproj-labs/gatewayAPI"
+        location: ""
+
+providerRBAC:
+  providers:
+    istio: false
+    smi: false
+    ambassador: false
+    awsLoadBalancerController: false
+    awsAppMesh: false
+    apisix: false
+    contour: false
+    glooPlatform: false
