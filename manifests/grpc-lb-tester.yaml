@@ -1,0 +1,27 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: grpc-lb-tester
+  namespace: default
+  labels:
+    app: grpc-lb-tester
+spec:
+  selector:
+    matchLabels:
+        app: grpc-lb-tester
+  template:
+    metadata:
+      name: grpc-lb-tester
+      labels:
+        app: grpc-lb-tester
+      annotations:
+        linkerd.io/inject: enabled
+    spec:
+      containers:
+        - name: grpc-lb-tester
+          image: ghcr.io/kvist-no/grpc-lb-tester:sha-dc042d1
+          env:
+          - name: URL
+            value: "http://podinfo-grpc.default.svc.cluster.local:80"
+          - name: INTERVAL
+            value: "1"

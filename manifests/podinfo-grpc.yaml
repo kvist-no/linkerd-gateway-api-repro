@@ -1,19 +1,19 @@
 kind: Rollout
 apiVersion: argoproj.io/v1alpha1
 metadata:
-  name: podinfo
+  name: podinfo-grpc
   labels:
-    app: podinfo
+    app: podinfo-grpc
 spec:
   replicas: 2
   strategy:
     canary:
-      stableService: podinfo
-      canaryService: podinfo-canary
+      stableService: podinfo-grpc
+      canaryService: podinfo-grpc-canary
       trafficRouting:
         plugins:
           argoproj-labs/gatewayAPI:
-            httpRoute: podinfo-http-route
+            grpcRoute: podinfo-grpc-route
             namespace: default
       steps:
         - setWeight: 50
@@ -21,24 +21,26 @@ spec:
   revisionHistoryLimit: 2
   selector:
     matchLabels:
-      app: podinfo
+      app: podinfo-grpc
   template:
     metadata:
       labels:
-        app: podinfo
+        app: podinfo-grpc
       annotations:
         linkerd.io/inject: enabled
     spec:
       containers:
-        - name: podinfo
+        - name: podinfo-grpc
           image: stefanprodan/podinfo:6.7.0
           command:
             - ./podinfo
             - --port=9898
             - --grpc-port=9999
+            - --grpc-service-name=podinfo
+            - --config=grpc4.yaml
           ports:
-            - name: http
-              containerPort: 9898
+            - name: grpc
+              containerPort: 9999
               protocol: TCP
           resources:
             limits:
@@ -51,49 +53,47 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: podinfo
+  name: podinfo-grpc
 spec:
   ports:
     - port: 80
-      targetPort: http
+      targetPort: grpc
       protocol: TCP
   selector:
-    app: podinfo
+    app: podinfo-grpc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: podinfo-canary
+  name: podinfo-grpc-canary
 spec:
   type: ClusterIP
   ports:
     - port: 80
-      targetPort: http
+      targetPort: grpc
       protocol: TCP
   selector:
-    app: podinfo
+    app: podinfo-grpc
 ---
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: GRPCRoute
 metadata:
-  name: podinfo-http-route
+  name: podinfo-grpc-route
   annotations:
-    retry.linkerd.io/http: '5xx'
+    retry.linkerd.io/grpc: 'cancelled,deadline-exceeded,internal,resource-exhausted,unavailable'
     retry.linkerd.io/limit: '3'
     retry.linkerd.io/timeout: 300ms
 spec:
   parentRefs:
-    - name: podinfo
+    - name: podinfo-grpc
       namespace: default
       kind: Service
       group: core
   rules:
     - backendRefs:
-        - name: podinfo
+        - name: podinfo-grpc
           port: 80
           kind: Service
-          group: core
-        - name: podinfo-canary
+        - name: podinfo-grpc-canary
           port: 80
           kind: Service
-          group: core
